@@ -52,7 +52,7 @@ import {
   buildDesktopDaemonTransportUrl,
   createDesktopDaemonTransportFactory,
 } from "@/desktop/daemon/desktop-daemon-transport";
-import { getDesktopHost } from "@/desktop/host";
+import { getDesktopHost, getIntellijRuntimeConfig, isIntellijRuntime } from "@/desktop/host";
 import { readDesktopManagedLocalCredential } from "@/desktop/daemon/local-credential";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 import { BROWSER_AUTOMATION_COMMAND_NAMES } from "@getpaseo/protocol/browser-automation/rpc-schemas";
@@ -560,6 +560,32 @@ function probeIntervalForConnection(
   return PROBE_MAX_BACKOFF_MS;
 }
 
+function createDirectTcpDaemonClient(input: {
+  base: Omit<DaemonClientConfig, "url">;
+  connection: Extract<HostConnection, { type: "directTcp" }>;
+  desktopTransportFactory: DaemonClientConfig["transportFactory"] | null;
+  webSocketConfig: Pick<DaemonClientConfig, "webSocketFactory">;
+}): DaemonClient {
+  if (isIntellijRuntime() && input.connection.useTls !== true && input.desktopTransportFactory) {
+    return new DaemonClient({
+      ...input.base,
+      transportFactory: input.desktopTransportFactory,
+      url: buildDesktopDaemonTransportUrl({
+        transportType: "tcp",
+        endpoint: input.connection.endpoint,
+      }),
+    });
+  }
+
+  return new DaemonClient({
+    ...input.base,
+    ...input.webSocketConfig,
+    url: buildDaemonWebSocketUrl(input.connection.endpoint, {
+      useTls: input.connection.useTls ?? false,
+    }),
+  });
+}
+
 function createDefaultDeps(
   resolveOrigin: (serverId: string) => DaemonClient | null = () => null,
 ): HostRuntimeControllerDeps {
@@ -629,12 +655,11 @@ function createDefaultDeps(
         });
       }
       if (connection.type === "directTcp") {
-        return new DaemonClient({
-          ...base,
-          ...webSocketConfig,
-          url: buildDaemonWebSocketUrl(connection.endpoint, {
-            useTls: connection.useTls ?? false,
-          }),
+        return createDirectTcpDaemonClient({
+          base,
+          connection,
+          desktopTransportFactory,
+          webSocketConfig,
         });
       }
       return new DaemonClient({
@@ -1556,7 +1581,11 @@ export function readInitialDaemonConnectionHint(input?: {
   const result = InitialDaemonConnectionHintSchema.safeParse(
     Reflect.get(globalThis, INITIAL_DAEMON_CONNECTION_HINT_GLOBAL_KEY),
   );
-  return result.success ? result.data : null;
+  if (result.success) return result.data;
+
+  const embeddedEndpoint = getIntellijRuntimeConfig()?.endpoint?.trim();
+  const embeddedHint = InitialDaemonConnectionHintSchema.safeParse({ listen: embeddedEndpoint });
+  return embeddedHint.success ? embeddedHint.data : null;
 }
 
 function readConfiguredLocalDaemonOverride(): string | null {

@@ -70,6 +70,27 @@ describe("desktop-daemon-transport", () => {
     expect(rpc.closedSessions).toEqual([sessionId]);
   });
 
+  it("opens direct TCP endpoints through the desktop bridge and forwards protocols", async () => {
+    const rpc = createFakeLocalDaemonTransportRpc();
+    const transportFactory = createDesktopDaemonTransportFactory(rpc);
+    expect(transportFactory).not.toBeNull();
+
+    const url = buildDesktopDaemonTransportUrl({
+      transportType: "tcp",
+      endpoint: "localhost:6767",
+    });
+    transportFactory!({ url, protocols: ["paseo.bearer.compat"] });
+    rpc.resolveListen(vi.fn());
+    await Promise.resolve();
+
+    expect(rpc.openCalls).toHaveLength(1);
+    expect(rpc.openCalls[0]?.target).toEqual({
+      transportType: "tcp",
+      endpoint: "localhost:6767",
+      protocols: ["paseo.bearer.compat"],
+    });
+  });
+
   it("passes Remote SSH parameters to the desktop transport bridge", async () => {
     const rpc = createFakeLocalDaemonTransportRpc();
     const transportFactory = createDesktopDaemonTransportFactory(rpc);

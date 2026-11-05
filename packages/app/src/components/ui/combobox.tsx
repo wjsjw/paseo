@@ -67,6 +67,7 @@ import { getOverlayRoot, OverlayLayerProvider, useOverlayLayer } from "@/lib/ove
 import { density, densityIconBox } from "@/styles/density";
 import { DensityIcon } from "@/components/ui/density-icon";
 import { buildDesktopFrameStyle } from "./combobox-frame-style";
+import { createAnchorMeasurement, subscribeToAnchorViewport } from "./combobox-anchor-viewport";
 
 export { buildDesktopFrameStyle } from "./combobox-frame-style";
 
@@ -697,7 +698,9 @@ function useAnchorMeasure(
   isMobile: boolean,
   anchorRef: React.RefObject<View | null>,
   searchQuery: string,
+  windowWidth: number,
   windowHeight: number,
+  update: () => unknown,
   setters: MeasuredAnchorSetters,
 ) {
   const { setReferenceLeft, setReferenceTop, setReferenceWidth, setReferenceAtOrigin } = setters;
@@ -716,26 +719,34 @@ function useAnchorMeasure(
       return;
     }
 
-    const measure = () => {
-      referenceEl.measureInWindow((x, y, width) => {
+    const measurement = createAnchorMeasurement(
+      (callback) => referenceEl.measureInWindow(callback),
+      ({ x, y, width }) => {
         applyMeasuredAnchor(
           { setReferenceLeft, setReferenceTop, setReferenceWidth, setReferenceAtOrigin },
           x,
           y,
           width,
         );
-      });
+        void update();
+      },
+    );
+    const unsubscribe = IS_WEB ? subscribeToAnchorViewport(measurement.measure) : null;
+    measurement.measure();
+    const raf = requestAnimationFrame(measurement.measure);
+    return () => {
+      measurement.dispose();
+      cancelAnimationFrame(raf);
+      unsubscribe?.();
     };
-
-    measure();
-    const raf = requestAnimationFrame(measure);
-    return () => cancelAnimationFrame(raf);
   }, [
     anchorRef,
     isMobile,
     isOpen,
     searchQuery,
+    windowWidth,
     windowHeight,
+    update,
     setReferenceLeft,
     setReferenceTop,
     setReferenceWidth,
@@ -1394,7 +1405,7 @@ export function Combobox({
     setReferenceWidth,
   });
 
-  useAnchorMeasure(isOpen, isMobile, anchorRef, searchQuery, windowHeight, {
+  useAnchorMeasure(isOpen, isMobile, anchorRef, searchQuery, windowWidth, windowHeight, update, {
     setReferenceLeft,
     setReferenceTop,
     setReferenceWidth,

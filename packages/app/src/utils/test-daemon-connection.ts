@@ -6,6 +6,7 @@ import {
 } from "@getpaseo/client/internal/daemon-client";
 import type { DaemonClientConfig } from "@getpaseo/client/internal/daemon-client";
 import type { HostConnection } from "@/types/host-connection";
+import { isIntellijRuntime } from "@/desktop/host";
 import { createAppWebSocketFactory } from "@/runtime/websocket-factory";
 import { getOrCreateClientId } from "./client-id";
 import { resolveAppVersion } from "./app-version";
@@ -63,6 +64,31 @@ function buildRemoteSshClientConfig(input: {
       ...(input.connection.daemonPort !== undefined
         ? { daemonPort: input.connection.daemonPort }
         : {}),
+    }),
+  };
+}
+
+function buildDirectTcpClientConfig(input: {
+  connection: Extract<HostConnection, { type: "directTcp" }>;
+  base: Omit<DaemonClientConfig, "url">;
+  desktopTransportFactory: DaemonClientConfig["transportFactory"] | null;
+  buildDesktopTransportUrl: (target: DesktopDaemonTransportTarget) => string;
+}): DaemonClientConfig {
+  if (isIntellijRuntime() && input.connection.useTls !== true && input.desktopTransportFactory) {
+    return {
+      ...input.base,
+      transportFactory: input.desktopTransportFactory,
+      url: input.buildDesktopTransportUrl({
+        transportType: "tcp",
+        endpoint: input.connection.endpoint,
+      }),
+    };
+  }
+
+  return {
+    ...input.base,
+    url: buildDaemonWebSocketUrl(input.connection.endpoint, {
+      useTls: input.connection.useTls ?? false,
     }),
   };
 }
@@ -189,10 +215,12 @@ export async function buildClientConfig(
   }
 
   if (connection.type === "directTcp") {
-    return {
-      ...base,
-      url: buildDaemonWebSocketUrl(connection.endpoint, { useTls: connection.useTls ?? false }),
-    };
+    return buildDirectTcpClientConfig({
+      connection,
+      base,
+      desktopTransportFactory,
+      buildDesktopTransportUrl: deps.buildDesktopTransportUrl,
+    });
   }
 
   if (!serverId) {

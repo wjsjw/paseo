@@ -6,6 +6,7 @@ import {
   type WorkspaceStructureProject,
 } from "@/projects/workspace-structure";
 import type { DesktopBadgeWorkspaceStatus } from "@/utils/desktop-badge-state";
+import { selectIntellijProjectWorkspace } from "@/navigation/intellij-project-workspace";
 import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
 import type { ProjectDescriptor, WorkspaceDescriptor } from "../session-store";
 
@@ -123,6 +124,20 @@ export function selectWorkspaceExists(
   workspaceId: string | null,
 ): boolean {
   return selectWorkspace(state, serverId, workspaceId) !== null;
+}
+
+export function selectWorkspaceForProjectFolders(
+  state: SessionsSnapshot,
+  serverId: string | null,
+  workspaceFolders: readonly string[],
+): WorkspaceDescriptor | null {
+  if (!serverId) {
+    return null;
+  }
+  return selectIntellijProjectWorkspace({
+    workspaces: state.sessions[serverId]?.workspaces?.values(),
+    workspaceFolders,
+  });
 }
 
 export function selectHasHydratedWorkspaces(

@@ -49,6 +49,9 @@ class FakeDaemonProbe {
       if (target.transportType === "ssh") {
         return `paseo+desktop://ssh?host=${encodeURIComponent(target.host)}`;
       }
+      if (target.transportType === "tcp") {
+        return `paseo+desktop://tcp?endpoint=${encodeURIComponent(target.endpoint)}`;
+      }
       return `paseo+desktop://${target.transportType}?path=${encodeURIComponent(target.transportPath)}`;
     },
     createClient: (config) => {
@@ -125,7 +128,7 @@ describe("test-daemon-connection connectToDaemon", () => {
     expect(probe.clientIdsRequested).toBe(2);
   });
 
-  it("keeps direct TCP probes on the renderer WebSocket", async () => {
+  it("keeps direct TCP probes on the renderer WebSocket outside IntelliJ", async () => {
     const { connectToDaemon } = await import("./test-daemon-connection");
     const deps = {
       ...probe.deps,
@@ -146,6 +149,53 @@ describe("test-daemon-connection connectToDaemon", () => {
     await result.client.close();
 
     expect(probe.createdConfigs()[0]?.transportFactory).toBeUndefined();
+  });
+
+  it("uses the JCEF bridge for unencrypted IntelliJ direct TCP probes", async () => {
+    vi.stubGlobal("window", { paseoIntellij: { endpoint: "localhost:6767" } });
+    const { connectToDaemon } = await import("./test-daemon-connection");
+    const transportFactory = vi.fn();
+    const result = await connectToDaemon(
+      {
+        id: "direct:localhost:6767",
+        type: "directTcp",
+        endpoint: "localhost:6767",
+      },
+      undefined,
+      {
+        ...probe.deps,
+        createDesktopTransportFactory: () => transportFactory,
+      },
+    );
+    await result.client.close();
+
+    expect(probe.createdConfigs()[0]).toMatchObject({
+      url: "paseo+desktop://tcp?endpoint=localhost%3A6767",
+      transportFactory,
+    });
+  });
+
+  it("keeps TLS IntelliJ direct TCP probes on the renderer WebSocket", async () => {
+    vi.stubGlobal("window", { paseoIntellij: { endpoint: "remote.example:6767" } });
+    const { connectToDaemon } = await import("./test-daemon-connection");
+    const transportFactory = vi.fn();
+    const result = await connectToDaemon(
+      {
+        id: "direct:wss:remote.example:6767",
+        type: "directTcp",
+        endpoint: "remote.example:6767",
+        useTls: true,
+      },
+      undefined,
+      {
+        ...probe.deps,
+        createDesktopTransportFactory: () => transportFactory,
+      },
+    );
+    await result.client.close();
+
+    expect(probe.createdConfigs()[0]?.transportFactory).toBeUndefined();
+    expect(probe.createdConfigs()[0]?.url).toBe("wss://remote.example:6767/ws");
   });
 
   it("keeps the bundle cache factory on a probe client that the host runtime can adopt", async () => {

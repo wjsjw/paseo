@@ -16,6 +16,7 @@ import {
   selectWorkspaceDirectory,
   selectWorkspaceExists,
   selectWorkspaceFields,
+  selectWorkspaceForProjectFolders,
   selectWorkspaceKeys,
   selectWorkspaceStatusesForBadges,
   workspaceEqualityFns,
@@ -41,6 +42,17 @@ export function useWorkspace(
   return useStoreWithEqualityFn(
     useSessionStore,
     (state) => selectWorkspace(state, serverId, workspaceId),
+    workspaceEqualityFns.identity,
+  );
+}
+
+export function useWorkspaceForProjectFolders(
+  serverId: string | null,
+  workspaceFolders: readonly string[],
+): WorkspaceDescriptor | null {
+  return useStoreWithEqualityFn(
+    useSessionStore,
+    (state) => selectWorkspaceForProjectFolders(state, serverId, workspaceFolders),
     workspaceEqualityFns.identity,
   );
 }

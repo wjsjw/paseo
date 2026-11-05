@@ -204,6 +204,36 @@ describe("resolveStartupRoute", () => {
     ).toEqual({ kind: "splash" });
   });
 
+  it("routes IntelliJ startup to the workspace for the currently open project", () => {
+    expect(
+      resolveStartupRoute({
+        ...baseIndexInput,
+        hosts: [{ serverId: "server-intellij" }, { serverId: "server-previous" }],
+        workspaceSelection: { serverId: "server-previous", workspaceId: "old-workspace" },
+        intellijProjectSelection: {
+          serverId: "server-intellij",
+          workspaceId: "current-project-workspace",
+        },
+        isWorkspaceSelectionLoaded: false,
+      }),
+    ).toEqual({
+      kind: "redirect",
+      href: "/h/server-intellij/workspace/current-project-workspace",
+    });
+  });
+
+  it("waits for IntelliJ project workspace hydration before restoring another workspace", () => {
+    expect(
+      resolveStartupRoute({
+        ...baseIndexInput,
+        anyOnlineHostServerId: "server-previous",
+        hosts: [{ serverId: "server-intellij" }, { serverId: "server-previous" }],
+        workspaceSelection: { serverId: "server-previous", workspaceId: "old-workspace" },
+        isIntellijProjectSelectionLoading: true,
+      }),
+    ).toEqual({ kind: "splash" });
+  });
+
   it("keeps startup on the splash while the host registry is loading", () => {
     expect(
       resolveStartupRoute({

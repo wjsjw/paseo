@@ -4356,6 +4356,19 @@ describe("readInitialDaemonConnectionHint", () => {
     expect(readInitialDaemonConnectionHint({ isWebRuntime: true })).toBeNull();
   });
 
+  it("uses the injected IntelliJ endpoint when no global hint is present", () => {
+    vi.stubGlobal("window", {
+      paseoIntellij: {
+        endpoint: "127.0.0.1:6767",
+        workspaceFolders: ["/Users/example/project"],
+      },
+    });
+    expect(readInitialDaemonConnectionHint({ isWebRuntime: true })).toEqual({
+      listen: "127.0.0.1:6767",
+      useTls: false,
+    });
+  });
+
   it("parses a valid listen-only hint", () => {
     (globalThis as Record<string, unknown>).__PASEO_INITIAL_DAEMON_CONNECTION__ = {
       listen: "localhost:6767",

@@ -71,7 +71,17 @@ export interface RemoteSshTransportTarget {
   daemonPort?: number;
 }
 
-export type DesktopDaemonTransportTarget = LocalTransportTarget | RemoteSshTransportTarget;
+export interface TcpTransportTarget {
+  [key: string]: unknown;
+  transportType: "tcp";
+  endpoint: string;
+  protocols?: string[];
+}
+
+export type DesktopDaemonTransportTarget =
+  | LocalTransportTarget
+  | RemoteSshTransportTarget
+  | TcpTransportTarget;
 
 export interface OpenLocalTransportSessionInput {
   [key: string]: unknown;

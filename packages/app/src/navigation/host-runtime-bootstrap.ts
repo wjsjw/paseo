@@ -114,6 +114,8 @@ export interface ResolveIndexStartupRouteInput extends ResolveStartupRouteBaseIn
   route: IndexStartupRouteTarget;
   anyOnlineHostServerId: string | null;
   workspaceSelection: ActiveWorkspaceSelection | null;
+  intellijProjectSelection?: ActiveWorkspaceSelection | null;
+  isIntellijProjectSelectionLoading?: boolean;
   workspaceSelectionStatus: WorkspaceSelectionStatus;
   isWorkspaceSelectionLoaded: boolean;
   hasGivenUpWaitingForHost: boolean;
@@ -180,6 +182,23 @@ function hostExists(hosts: readonly { serverId: string }[], serverId: string | n
 function resolveReadyIndexStartupRoute(input: ResolveIndexStartupRouteInput): StartupRouteDecision {
   if (!isIndexPathname(input.route.pathname)) {
     return { kind: "render" };
+  }
+
+  if (input.isIntellijProjectSelectionLoading) {
+    return { kind: "splash" };
+  }
+
+  if (
+    input.intellijProjectSelection &&
+    hostExists(input.hosts, input.intellijProjectSelection.serverId)
+  ) {
+    return {
+      kind: "redirect",
+      href: buildHostWorkspaceRoute(
+        input.intellijProjectSelection.serverId,
+        input.intellijProjectSelection.workspaceId,
+      ),
+    };
   }
 
   if (!input.isWorkspaceSelectionLoaded) {

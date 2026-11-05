@@ -172,6 +172,13 @@ export interface DesktopInvokeBridge {
   invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 }
 
+export interface IntellijRuntimeConfig {
+  endpoint: string;
+  workspaceFolders: string[];
+  hasPassword?: boolean;
+  bridgeProtocol?: number;
+}
+
 export interface DesktopHostBridge {
   platform?: string;
   windowChromeMode?: string;
@@ -192,6 +199,7 @@ export interface DesktopHostBridge {
 declare global {
   interface Window {
     paseoDesktop?: DesktopHostBridge;
+    paseoIntellij?: IntellijRuntimeConfig;
   }
 }
 
@@ -202,8 +210,19 @@ export function getDesktopHost(): DesktopHostBridge | null {
   return getElectronHost();
 }
 
+export function getIntellijRuntimeConfig(): IntellijRuntimeConfig | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.paseoIntellij ?? null;
+}
+
+export function isIntellijRuntime(): boolean {
+  return getIntellijRuntimeConfig() !== null;
+}
+
 export function isElectronRuntime(): boolean {
-  return getDesktopHost() !== null;
+  return getDesktopHost() !== null && !isIntellijRuntime();
 }
 
 export function isElectronRuntimeMac(): boolean {

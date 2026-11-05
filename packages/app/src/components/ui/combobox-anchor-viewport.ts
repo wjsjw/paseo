@@ -17,13 +17,15 @@ export function createAnchorMeasurement(
 ) {
   let active = true;
   let measurementId = 0;
+  let appliedMeasurementId = 0;
 
   return {
     measure() {
       const currentMeasurementId = ++measurementId;
       measureInWindow((x, y, width, height) => {
-        if (!active || currentMeasurementId !== measurementId) return;
+        if (!active || currentMeasurementId <= appliedMeasurementId) return;
         if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return;
+        appliedMeasurementId = currentMeasurementId;
         onMeasurement({ x, y, width, height });
       });
     },

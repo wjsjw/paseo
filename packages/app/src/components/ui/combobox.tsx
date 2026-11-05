@@ -732,11 +732,21 @@ function useAnchorMeasure(
       },
     );
     const unsubscribe = IS_WEB ? subscribeToAnchorViewport(measurement.measure) : null;
+    let remainingLayoutMeasurements = 2;
+    let scheduledFrame: number | null = null;
+    const measureAfterLayout = () => {
+      scheduledFrame = null;
+      measurement.measure();
+      remainingLayoutMeasurements -= 1;
+      if (remainingLayoutMeasurements > 0) {
+        scheduledFrame = requestAnimationFrame(measureAfterLayout);
+      }
+    };
     measurement.measure();
-    const raf = requestAnimationFrame(measurement.measure);
+    scheduledFrame = requestAnimationFrame(measureAfterLayout);
     return () => {
       measurement.dispose();
-      cancelAnimationFrame(raf);
+      if (scheduledFrame !== null) cancelAnimationFrame(scheduledFrame);
       unsubscribe?.();
     };
   }, [
@@ -1076,6 +1086,7 @@ interface DesktopBodyProps {
   handleDesktopKey: (key: DesktopKey, event?: KeyboardInputEvent) => boolean;
   refs: ReturnType<typeof useFloating>["refs"];
   shouldUseDesktopFade: boolean;
+  shouldHideDesktopContent: boolean;
   desktopFrameStyle: StyleProp<ViewStyle>;
   handleDesktopContentLayout: (event: LayoutChangeEvent) => void;
   header: SheetHeader | undefined;
@@ -1217,6 +1228,7 @@ function DesktopComboboxBody(props: DesktopBodyProps): ReactElement | null {
       <View
         ref={props.refs.setOffsetParent}
         collapsable={false}
+        pointerEvents={props.shouldHideDesktopContent ? "none" : "auto"}
         style={[
           styles.desktopOverlay,
           isWeb ? styles.desktopOverlayWeb : null,
@@ -1637,6 +1649,7 @@ export function Combobox({
       setOverlayScope={setOverlayScope}
       refs={refs}
       shouldUseDesktopFade={shouldUseDesktopFade}
+      shouldHideDesktopContent={shouldHideDesktopContent}
       desktopFrameStyle={desktopFrameStyle}
       handleDesktopContentLayout={handleDesktopContentLayout}
       header={header}
@@ -1787,7 +1800,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   desktopOverlayWeb: {
     ...StyleSheet.absoluteFill,
-    pointerEvents: "auto" as const,
   },
   desktopBackdrop: {
     position: "absolute",

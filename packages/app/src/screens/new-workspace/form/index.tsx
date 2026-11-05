@@ -173,6 +173,18 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
 
   const selectedHostLabel =
     host.allHosts.find((h) => h.serverId === host.selectedServerId)?.label ?? "Host";
+  const {
+    open: openHostPicker,
+    openState: hostPickerOpen,
+    onOpenChange: onHostPickerOpenChange,
+  } = host;
+  const handleHostTriggerPress = useCallback(() => {
+    if (hostPickerOpen) {
+      onHostPickerOpenChange(false);
+      return;
+    }
+    openHostPicker();
+  }, [hostPickerOpen, onHostPickerOpenChange, openHostPicker]);
   const selectedProject = project.selectedProject;
   const selectedProjectIconUri = selectedProject
     ? (project.iconDataByProjectViewKey.get(selectedProject.viewKey) ?? null)
@@ -238,7 +250,7 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
         tooltip={t("newWorkspace.tooltips.host")}
         icon={hostIcon}
         value={selectedHostLabel}
-        onPress={host.open}
+        onPress={handleHostTriggerPress}
         disabled={isPending}
         testID="host-picker-trigger"
       />

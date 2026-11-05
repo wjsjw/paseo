@@ -56,10 +56,26 @@ describe("createAnchorMeasurement", () => {
 
     measurement.measure();
     measurement.measure();
-    callbacks[0](10, 20, 100, 30);
     callbacks[1](15, 25, 120, 40);
+    callbacks[0](10, 20, 100, 30);
 
     expect(onMeasurement).toHaveBeenCalledExactlyOnceWith({ x: 15, y: 25, width: 120, height: 40 });
+  });
+
+  it("keeps an earlier valid measurement if a newer request returns invalid geometry", () => {
+    const callbacks: Array<(x: number, y: number, width: number, height: number) => void> = [];
+    const onMeasurement = vi.fn();
+    const measurement = createAnchorMeasurement(
+      (callback) => callbacks.push(callback),
+      onMeasurement,
+    );
+
+    measurement.measure();
+    measurement.measure();
+    callbacks[0](10, 20, 100, 30);
+    callbacks[1](0, 0, 0, 30);
+
+    expect(onMeasurement).toHaveBeenCalledExactlyOnceWith({ x: 10, y: 20, width: 100, height: 30 });
   });
 
   it("ignores invalid geometry and callbacks after disposal", () => {

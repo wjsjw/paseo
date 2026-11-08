@@ -133,6 +133,12 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".heic": "image/heic",
+  ".heif": "image/heif",
+  ".tif": "image/tiff",
+  ".tiff": "image/tiff",
+  ".bmp": "image/bmp",
   ".svg": "image/svg+xml",
 };
 

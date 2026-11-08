@@ -1,6 +1,9 @@
 import { MessagePreview, MessageSender } from "@/components/user-message";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { getAgentAttachmentPillContent } from "@/attachments/attachment-pill-content";
+import { persistAttachmentFromBytes } from "@/attachments/service";
+import { retainAttachmentForGarbageCollection } from "@/attachments/gc-retention";
+import type { AttachmentMetadata } from "@/attachments/types";
 import { AssistantForkMenu, type AssistantForkTarget } from "@/components/assistant-fork-menu";
 import { AttachmentLightbox, type ImageLightboxSource } from "@/components/attachment-lightbox";
 import {
@@ -20,7 +23,7 @@ import { useRevealedText, type MarkdownPhase } from "@/hooks/use-revealed-text";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { buildToolCallPresentation } from "@/tool-calls/presentation";
-import type { TaskActivity, TodoEntry, UserMessageImageAttachment } from "@/types/stream";
+import type { TaskActivity, TimelineUserMessageImageAttachment, TodoEntry } from "@/types/stream";
 import { setAssistantMessageHeight } from "@/utils/assistant-message-height-estimate";
 import { isRenderProfileEnabled } from "@/utils/render-profiler";
 import { writeMarkdownToRichClipboard } from "@/utils/rich-clipboard";
@@ -32,6 +35,7 @@ import { useTargetAgentTitle } from "@/tool-calls/use-target-agent-title";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { AgentMessage } from "@getpaseo/protocol/agent-message";
 import type { AgentCapabilityFlags, ToolCallDetail } from "@getpaseo/protocol/agent-types";
+import type { AgentTimelineImageAttachment } from "@getpaseo/protocol/agent-types";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import MaskedView from "@react-native-masked-view/masked-view";
 import {
@@ -96,7 +100,7 @@ interface UserMessageProps {
   agentId?: string;
   messageId?: string;
   message: string;
-  images?: UserMessageImageAttachment[];
+  images?: TimelineUserMessageImageAttachment[];
   attachments?: AgentAttachment[];
   timestamp: number;
   capabilities?: AgentCapabilityFlags;
@@ -371,18 +375,83 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
 }));
 
 interface UserMessageImagePillProps {
-  image: UserMessageImageAttachment;
-  onOpen: (image: UserMessageImageAttachment) => void;
+  image: TimelineUserMessageImageAttachment;
+  onOpen: (image: AttachmentMetadata) => void;
   accessibilityLabel: string;
 }
 
-function UserMessageImagePill({ image, onOpen, accessibilityLabel }: UserMessageImagePillProps) {
+function splitServerImagePath(path: string): { cwd: string; path: string } | null {
+  const separatorIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  if (separatorIndex <= 0 || separatorIndex === path.length - 1) return null;
+  return { cwd: path.slice(0, separatorIndex), path: path.slice(separatorIndex + 1) };
+}
+
+function isServerImageAttachment(
+  image: TimelineUserMessageImageAttachment,
+): image is AgentTimelineImageAttachment {
+  return "path" in image;
+}
+
+function UserMessageImagePill({
+  image,
+  onOpen,
+  accessibilityLabel,
+  client,
+  serverId,
+}: UserMessageImagePillProps & { client?: DaemonClient | null; serverId?: string }) {
+  const isServerImage = isServerImageAttachment(image);
+  const [downloadedMetadata, setDownloadedMetadata] = useState<AttachmentMetadata | null>(null);
+
+  useEffect(() => {
+    if (!isServerImage || !client) {
+      setDownloadedMetadata(null);
+      return;
+    }
+
+    let disposed = false;
+    let releaseAttachment: (() => void) | null = null;
+    setDownloadedMetadata(null);
+    void (async () => {
+      const target = splitServerImagePath(image.path);
+      if (!target) throw new Error("Invalid server image path");
+      const file = await client.readFile(target.cwd, target.path, undefined, 32 * 1024 * 1024);
+      if (file.kind !== "image") throw new Error("Timeline attachment is not an image");
+      const safeServerId = (serverId ?? "unknown-server").replace(/[^a-zA-Z0-9_-]/g, "_");
+      const safeImageId = image.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const metadata = await persistAttachmentFromBytes({
+        id: `timeline-image-${safeServerId}-${safeImageId}`,
+        bytes: file.bytes,
+        mimeType: file.mime,
+        fileName: target.path,
+      });
+      if (disposed) return;
+      releaseAttachment = retainAttachmentForGarbageCollection(metadata.id);
+      setDownloadedMetadata(metadata);
+    })().catch((error: unknown) => {
+      if (!disposed) {
+        console.warn("[attachments] Failed to load timeline image", {
+          attachmentId: image.id,
+          error,
+        });
+      }
+    });
+
+    return () => {
+      disposed = true;
+      releaseAttachment?.();
+    };
+  }, [client, image, isServerImage, serverId]);
+
+  const metadata = isServerImage ? downloadedMetadata : image;
   const handlePress = useCallback(() => {
-    onOpen(image);
-  }, [onOpen, image]);
+    if (metadata) onOpen(metadata);
+  }, [metadata, onOpen]);
   return (
-    <AttachmentFrame onPress={handlePress} accessibilityLabel={accessibilityLabel}>
-      <AttachmentThumbnail metadata={image} />
+    <AttachmentFrame
+      onPress={metadata ? handlePress : undefined}
+      accessibilityLabel={accessibilityLabel}
+    >
+      <AttachmentThumbnail metadata={metadata} />
     </AttachmentFrame>
   );
 }
@@ -408,7 +477,7 @@ export const UserMessage = memo(function UserMessage({
   const isCompact = useIsCompactFormFactor();
   const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
-  const [lightboxMetadata, setLightboxMetadata] = useState<UserMessageImageAttachment | null>(null);
+  const [lightboxMetadata, setLightboxMetadata] = useState<AttachmentMetadata | null>(null);
   const handleLightboxClose = useCallback(() => setLightboxMetadata(null), []);
   const lightboxSource = useMemo<ImageLightboxSource | null>(
     () => (lightboxMetadata ? { type: "attachment", metadata: lightboxMetadata } : null),
@@ -488,6 +557,8 @@ export const UserMessage = memo(function UserMessage({
                     image={image}
                     onOpen={setLightboxMetadata}
                     accessibilityLabel={t("composer.attachments.openImage")}
+                    client={client}
+                    serverId={serverId}
                   />
                 ))}
               </View>

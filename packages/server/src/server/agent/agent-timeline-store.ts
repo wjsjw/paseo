@@ -85,6 +85,17 @@ export class InMemoryAgentTimelineStore {
     );
   }
 
+  enrichSubmittedUserMessageImages(
+    agentId: string,
+    clientMessageId: string,
+    images: NonNullable<Extract<AgentTimelineItem, { type: "user_message" }>["images"]>,
+  ): AgentTimelineRow | null {
+    return this.requireState(agentId).projection.enrichSubmittedUserMessageImages(
+      clientMessageId,
+      images,
+    );
+  }
+
   getEpoch(agentId: string): string {
     return this.requireState(agentId).epoch;
   }

@@ -224,6 +224,12 @@ function buildStoredAgentConfig(record: StoredAgentRecord): AgentSessionConfig {
   return stripInternalPaseoMcpServer(config);
 }
 
+function providerRunOptions(options?: AgentRunOptions): AgentRunOptions {
+  if (!options) return {};
+  const { submittedImageAttachments: _submittedImageAttachments, ...providerOptions } = options;
+  return providerOptions;
+}
+
 export { AGENT_LIFECYCLE_STATUSES, type AgentLifecycleStatus };
 export type {
   AgentTimelineCursor,
@@ -2648,7 +2654,9 @@ export class AgentManager {
     }
     this.touchUpdatedAt(agent);
     if (options?.clientMessageId) {
-      this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, "accepted");
+      this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, "accepted", {
+        images: options.submittedImageAttachments,
+      });
       this.emitState(agent);
     }
     const dispatch = (event: AgentStreamEvent): void => {
@@ -2725,7 +2733,7 @@ export class AgentManager {
   }): Promise<string> {
     const { agent, agentId, pendingRun, prompt, options } = params;
     try {
-      const result = await agent.session.startTurn(prompt, options);
+      const result = await agent.session.startTurn(prompt, providerRunOptions(options));
       if (pendingRun.settled) {
         throw new Error(`Agent ${agentId} run was canceled before its turn started`);
       }
@@ -2749,6 +2757,7 @@ export class AgentManager {
         if (options?.clientMessageId) {
           this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, "rejected", {
             messageId: options.clientMessageId,
+            images: options.submittedImageAttachments,
           });
         }
         await this.handleStreamEvent(agent, {
@@ -2862,6 +2871,7 @@ export class AgentManager {
         this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, "accepted", {
           messageId: options.clientMessageId,
           turnId,
+          images: options.submittedImageAttachments,
           providerMessageId:
             stagedSubmittedPromptEcho?.item.type === "user_message"
               ? stagedSubmittedPromptEcho.item.messageId
@@ -3025,7 +3035,7 @@ export class AgentManager {
     }
     const result = await this.runSteerAdmission(agent, expectedTurnId, async () => {
       const admission = await agent.session.steerActiveTurn!(prompt, {
-        ...options,
+        ...providerRunOptions(options),
         expectedTurnId,
       });
       if (admission.status === "accepted") {
@@ -3035,6 +3045,7 @@ export class AgentManager {
           options?.clientMessageId,
           expectedTurnId,
           admission.providerMessageId,
+          options?.submittedImageAttachments,
         );
       }
       return admission;
@@ -3064,7 +3075,7 @@ export class AgentManager {
     const result = agent.session.steerActiveTurn
       ? await this.runSteerAdmission(agent, expectedTurnId, async () => {
           const admission = await agent.session.steerActiveTurn!(prompt, {
-            ...options,
+            ...providerRunOptions(options),
             expectedTurnId,
           });
           if (admission.status === "accepted") {
@@ -3074,6 +3085,7 @@ export class AgentManager {
               options?.clientMessageId,
               expectedTurnId,
               admission.providerMessageId,
+              options?.submittedImageAttachments,
             );
           }
           return admission;
@@ -3180,6 +3192,7 @@ export class AgentManager {
     clientMessageId: string | undefined,
     expectedTurnId: string,
     providerMessageId: string | undefined,
+    images?: AgentRunOptions["submittedImageAttachments"],
   ): Promise<void> {
     if (!clientMessageId) {
       return;
@@ -3187,6 +3200,7 @@ export class AgentManager {
     this.recordSubmittedPrompt(agent, prompt, clientMessageId, "accepted", {
       messageId: clientMessageId,
       turnId: expectedTurnId,
+      images,
       ...(providerMessageId ? { providerMessageId } : {}),
     });
     this.emitState(agent);
@@ -5045,7 +5059,12 @@ export class AgentManager {
     prompt: AgentPromptInput,
     clientMessageId: string,
     outcome: "accepted" | "rejected",
-    options?: { messageId?: string; providerMessageId?: string; turnId?: string },
+    options?: {
+      messageId?: string;
+      providerMessageId?: string;
+      turnId?: string;
+      images?: AgentRunOptions["submittedImageAttachments"];
+    },
   ): void {
     const items = projectAgentMessages({
       type: "user_message",
@@ -5056,7 +5075,13 @@ export class AgentManager {
     for (const item of items) {
       // Human attempts stay in history on rejection; delivery notifications require acceptance.
       if (outcome === "rejected" && item.type !== "user_message") continue;
-      this.recordSubmittedPromptItem(agent, item, options);
+      this.recordSubmittedPromptItem(
+        agent,
+        item.type === "user_message" && options?.images?.length
+          ? { ...item, images: options.images }
+          : item,
+        options,
+      );
     }
   }
 
@@ -5065,12 +5090,42 @@ export class AgentManager {
     item: AgentTimelineItem,
     options?: { providerMessageId?: string; turnId?: string },
   ): void {
-    if (
-      item.type === "user_message" &&
-      item.clientMessageId &&
-      this.timelineStore.getSubmittedUserMessage(agent.id, item.clientMessageId)
-    )
+    const submitted = item.type === "user_message" ? item : undefined;
+    const existing = submitted?.clientMessageId
+      ? this.timelineStore.getSubmittedUserMessage(agent.id, submitted.clientMessageId)
+      : null;
+    if (existing) {
+      if (
+        submitted?.clientMessageId &&
+        submitted.images?.length &&
+        existing.item.type === "user_message" &&
+        !existing.item.images?.length
+      ) {
+        const enriched = this.timelineStore.enrichSubmittedUserMessageImages(
+          agent.id,
+          submitted.clientMessageId,
+          submitted.images,
+        );
+        if (enriched) {
+          this.enqueueDurableTimelineUpdate(agent.id, enriched);
+          this.dispatchStream(
+            agent.id,
+            {
+              type: "timeline",
+              item: enriched.item,
+              provider: agent.provider,
+              ...(enriched.turnId ? { turnId: enriched.turnId } : {}),
+            },
+            {
+              seq: enriched.seq,
+              epoch: this.timelineStore.getEpoch(agent.id),
+              timestamp: enriched.timestamp,
+            },
+          );
+        }
+      }
       return;
+    }
     this.touchUpdatedAt(agent);
     if (item.type === "user_message") agent.lastUserMessageAt = new Date();
     this.recordAndDispatchTimelineItem(agent.id, item, agent.provider, options?.turnId, options);

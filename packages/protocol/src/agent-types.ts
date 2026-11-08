@@ -372,8 +372,22 @@ export interface AgentTaskItem {
   activeForm?: string;
 }
 
+/** Server stored reference for an image attached to a submitted user message. */
+export interface AgentTimelineImageAttachment {
+  id: string;
+  mimeType: string;
+  size: number;
+  path: string;
+}
+
 export type AgentTimelineItem =
-  | { type: "user_message"; text: string; messageId?: string; clientMessageId?: string }
+  | {
+      type: "user_message";
+      text: string;
+      messageId?: string;
+      clientMessageId?: string;
+      images?: AgentTimelineImageAttachment[];
+    }
   | { type: "assistant_message"; text: string; messageId?: string }
   | { type: "reasoning"; text: string }
   | ToolCallTimelineItem

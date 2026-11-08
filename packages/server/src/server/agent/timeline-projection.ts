@@ -538,6 +538,20 @@ export class TimelineProjection {
     this.rows[index] = { ...this.rows[index], providerMessageId };
     return { ...this.rows[index] };
   }
+
+  enrichSubmittedUserMessageImages(
+    clientMessageId: string,
+    images: NonNullable<Extract<AgentTimelineItem, { type: "user_message" }>["images"]>,
+  ): ProjectedTimelineRow | null {
+    const index = this.rows.findIndex(
+      (row) => row.item.type === "user_message" && row.item.clientMessageId === clientMessageId,
+    );
+    const row = this.rows[index];
+    if (index < 0 || !row || row.item.type !== "user_message" || row.item.images?.length)
+      return null;
+    this.rows[index] = { ...row, item: { ...row.item, images } };
+    return { ...this.rows[index] };
+  }
 }
 
 export function projectTimelineRows(input: {

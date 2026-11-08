@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 
+import type { AgentTimelineImageAttachment } from "@getpaseo/protocol/agent-types";
 import { FileTransferOpcode, type FileTransferFrame } from "@getpaseo/protocol/binary-frames/index";
 import { getErrorMessage } from "@getpaseo/protocol/error-utils";
 import type { FileUploadRequest, FileUploadResponse } from "../messages.js";
@@ -40,6 +41,32 @@ export class FileUploadStore {
     this.paseoHome = options.paseoHome;
     this.staleUploadTimeoutMs =
       options.staleUploadTimeoutMs ?? FileUploadStore.defaultStaleUploadTimeoutMs;
+  }
+
+  async persistTimelineImages(input: {
+    agentId: string;
+    messageId: string;
+    images: Array<{ data: string; mimeType: string }>;
+  }): Promise<AgentTimelineImageAttachment[]> {
+    return await Promise.all(
+      input.images.map(async (image, index) => {
+        const mimeType = image.mimeType.toLowerCase();
+        const extension = IMAGE_EXTENSION_BY_MIME_TYPE[mimeType];
+        if (!extension) {
+          throw new Error(`Unsupported timeline image type: ${image.mimeType}`);
+        }
+        const bytes = Buffer.from(image.data, "base64");
+        const id = `timeline-image-${createHash("sha256")
+          .update(`${input.agentId}\0${input.messageId}\0${index}`)
+          .digest("hex")}`;
+        const directory = join(this.paseoHome, "uploads", id);
+        const fileName = `image${extension}`;
+        const path = join(directory, fileName);
+        await mkdir(directory, { recursive: true });
+        await writeFile(path, bytes);
+        return { id, mimeType, size: bytes.byteLength, path };
+      }),
+    );
   }
 
   beginUpload(
@@ -199,6 +226,20 @@ export class FileUploadStore {
     await rm(join(this.paseoHome, "uploads", upload.id), { recursive: true, force: true });
   }
 }
+
+const IMAGE_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/jpg": ".jpg",
+  "image/gif": ".gif",
+  "image/webp": ".webp",
+  "image/avif": ".avif",
+  "image/heic": ".heic",
+  "image/heif": ".heif",
+  "image/tiff": ".tiff",
+  "image/bmp": ".bmp",
+  "image/svg+xml": ".svg",
+};
 
 function buildUploadResponse(upload: PendingUpload, error: string | null): FileUploadResponse {
   return {

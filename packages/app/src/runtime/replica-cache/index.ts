@@ -88,6 +88,12 @@ const CachedImageAttachmentSchema = z.strictObject({
   byteSize: z.number().nullable().optional(),
   createdAt: z.number(),
 });
+const CachedTimelineImageAttachmentSchema = z.strictObject({
+  id: z.string().min(1),
+  mimeType: z.string().startsWith("image/"),
+  size: z.number().int().nonnegative(),
+  path: z.string().min(1),
+});
 const PluginTimelineDataSchema: z.ZodType<PluginTimelineData> = z.lazy(() =>
   z.union([
     z.null(),
@@ -130,7 +136,9 @@ const StoredTimelineItemSchema = z.discriminatedUnion("kind", [
     clientMessageId: z.string().optional(),
     messageId: z.string().optional(),
     text: z.string(),
-    images: z.array(CachedImageAttachmentSchema).optional(),
+    images: z
+      .array(z.union([CachedImageAttachmentSchema, CachedTimelineImageAttachmentSchema]))
+      .optional(),
     attachments: z.array(AgentAttachmentSchema).optional(),
   }),
   z.strictObject({

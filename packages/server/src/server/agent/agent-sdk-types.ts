@@ -3,6 +3,7 @@ import type {
   AgentFeatureSelect,
   AgentFeatureToggle,
   AgentProviderNotice,
+  AgentTimelineImageAttachment,
   AgentTaskItem,
   JsonValue,
   ProviderOptions,
@@ -201,6 +202,8 @@ export interface AgentRunOptions {
   resumeFrom?: AgentPersistenceHandle;
   maxThinkingTokens?: number;
   clientMessageId?: string;
+  /** Server-owned image refs retained with the canonical submitted user message. */
+  submittedImageAttachments?: AgentTimelineImageAttachment[];
 }
 
 export interface AgentSteerOptions extends AgentRunOptions {
@@ -398,7 +401,13 @@ export interface PluginTimelineItem {
 }
 
 export type AgentTimelineItem =
-  | { type: "user_message"; text: string; messageId?: string; clientMessageId?: string }
+  | {
+      type: "user_message";
+      text: string;
+      messageId?: string;
+      clientMessageId?: string;
+      images?: AgentTimelineImageAttachment[];
+    }
   | { type: "assistant_message"; text: string; messageId?: string }
   | { type: "reasoning"; text: string }
   | ToolCallTimelineItem

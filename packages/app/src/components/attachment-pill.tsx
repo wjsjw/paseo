@@ -132,7 +132,7 @@ export function AttachmentLabel({ icon, title, subtitle }: AttachmentLabelProps)
 }
 
 /** Square image preview pill body. */
-export function AttachmentThumbnail({ metadata }: { metadata: AttachmentMetadata }) {
+export function AttachmentThumbnail({ metadata }: { metadata: AttachmentMetadata | null }) {
   const uri = useAttachmentPreviewUrl(metadata);
   const source = useMemo(() => ({ uri: uri ?? "" }), [uri]);
   if (!uri) {

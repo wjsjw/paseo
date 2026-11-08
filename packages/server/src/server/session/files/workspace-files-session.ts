@@ -1,6 +1,7 @@
 import type pino from "pino";
 import type { SessionDelivery } from "../owned-subscriptions/index.js";
 import type { FileVersion } from "@getpaseo/protocol/messages";
+import type { AgentTimelineImageAttachment } from "@getpaseo/protocol/agent-types";
 import { getErrorMessage } from "@getpaseo/protocol/error-utils";
 import {
   encodeFileTransferFrame,
@@ -77,6 +78,14 @@ export class WorkspaceFilesSession {
     this.logger = options.logger;
     this.fileUploads = new FileUploadStore({ paseoHome: options.paseoHome });
     this.fileObserver = options.fileObserver ?? workspaceFileObserver;
+  }
+
+  async persistTimelineImages(input: {
+    agentId: string;
+    messageId: string;
+    images: Array<{ data: string; mimeType: string }>;
+  }): Promise<AgentTimelineImageAttachment[]> {
+    return await this.fileUploads.persistTimelineImages(input);
   }
 
   async handleFileSubscribeRequest(

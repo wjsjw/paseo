@@ -8320,12 +8320,21 @@ export class Session {
 
     try {
       const agentId = resolved.agentId;
+      const messageId = msg.messageId ?? uuidv4();
+      const submittedImageAttachments =
+        !msg.sourceAgentId && msg.images?.length
+          ? await this.workspaceFilesSession.persistTimelineImages({
+              agentId,
+              messageId,
+              images: msg.images,
+            })
+          : undefined;
 
       const prompt = buildAgentPrompt(msg.text, msg.images, msg.attachments);
       this.sessionLogger.trace(
         {
           agentId,
-          messageId: msg.messageId,
+          messageId,
           activeTurnBehavior: msg.activeTurnBehavior,
           textPrefix: msg.text.slice(0, 80),
         },
@@ -8340,7 +8349,7 @@ export class Session {
         if (msg.sourceAgentId) {
           const receipt = this.agentMessages.enqueue({
             recipientId: agentId,
-            messageId: msg.messageId,
+            messageId,
             prompt,
             source: {
               kind: "agent-message",
@@ -8364,9 +8373,10 @@ export class Session {
           agentStorage: this.agentStorage,
           agentId,
           prompt,
-          messageId: msg.messageId,
+          messageId,
           activeTurnBehavior: msg.activeTurnBehavior ?? "interrupt",
           sessionMode: msg.sessionMode,
+          runOptions: { submittedImageAttachments },
           clearPendingPermissions: true,
           logger: this.sessionLogger,
         });
@@ -8378,10 +8388,10 @@ export class Session {
           );
         }
       };
-      const sent = msg.messageId
+      const sent = messageId
         ? this.messageReceipts.send({
             agentId,
-            messageId: msg.messageId,
+            messageId,
             request: {
               prompt,
               sourceAgentId: msg.sourceAgentId,

@@ -68,7 +68,17 @@ function PluginPanelBody({ theme }: { theme: PluginTheme }) {
   const host = useMemo(() => ({ id: serverId, label: hostLabel }), [hostLabel, serverId]);
   const layout = useMemo(() => ({ compact, platform: resolvePluginPlatform() }), [compact]);
   const stateSource = useMemo(() => createPluginClientStateSource(serverId), [serverId]);
-  const navigation = usePluginHostNavigation(serverId);
+  const hostNavigation = usePluginHostNavigation(serverId);
+  const activeAgentId = useSessionStore(
+    (state) => state.sessions[serverId]?.focusedAgentId ?? null,
+  );
+  const activeTerminalId = useSessionStore(
+    (state) => state.sessions[serverId]?.focusedTerminalId ?? null,
+  );
+  const navigation = useMemo(
+    () => ({ ...hostNavigation, activeAgentId, activeTerminalId }),
+    [activeAgentId, activeTerminalId, hostNavigation],
+  );
 
   if (!plugin || !contribution || !workspaceExists) {
     return <PluginPanelUnavailable />;

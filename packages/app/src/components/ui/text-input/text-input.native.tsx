@@ -32,6 +32,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
     const {
       initialValue = "",
       onChangeText,
+      rerenderOnChangeText = true,
       onPasteImages,
       onPasteError,
       variant = isInsideBottomSheet ? "bottom-sheet" : "default",
@@ -53,11 +54,10 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
     // once the view is attached.
     const isAwaitingReplacementRef = useRef(false);
     const [replacement, setReplacement] = useState({ revision: 0, autoFocus: false });
-    // Fabric re-measures the Android input when its `text` prop changes. A native edit only
+    // Fabric re-measures multiline editors when their `text` prop changes. A native edit only
     // refreshes a cached spannable, and batched IME deletes (Gboard hold-to-delete) leave the
-    // measured height at the previous content, so an emptied draft keeps several lines. Render
-    // again after every edit so `defaultValue` carries the current text and the input is
-    // re-measured. Only this leaf renders; the composer stays isolated from typing.
+    // measured height at the previous content, so an emptied draft keeps several lines. Keep
+    // this refresh enabled for editors that size to their content; fixed-size inputs can opt out.
     const [, bumpTextRevision] = useReducer((revision: number) => revision + 1, 0);
 
     const assignInputRef = useCallback((input: NativeInput | null) => {
@@ -131,9 +131,9 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
       (nextText: string) => {
         textRef.current = nextText;
         onChangeText?.(nextText);
-        bumpTextRevision();
+        if (rerenderOnChangeText) bumpTextRevision();
       },
-      [onChangeText],
+      [onChangeText, rerenderOnChangeText],
     );
     const handlePaste = useCallback(
       (error: string | null | undefined, files: PastedFile[]) => {

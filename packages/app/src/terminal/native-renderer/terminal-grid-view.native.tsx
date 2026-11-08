@@ -12,15 +12,17 @@ import type { ITheme } from "@xterm/xterm";
 import {
   PaseoTerminalView,
   type PaseoTerminalCellMetrics,
+  type PaseoTerminalRow,
   type PaseoTerminalTheme,
 } from "../../../modules/paseo-terminal";
 import {
   createTerminalCellStyleResolver,
   DEFAULT_TERMINAL_THEME,
   NATIVE_TERMINAL_SELECTION_COLORS,
+  type TerminalCellStyleResolver,
 } from "./colors";
 import { resolveNativeTerminalFontFamily } from "./font.native";
-import type { TerminalViewportState } from "./headless-terminal-state";
+import type { NativeTerminalCell, TerminalViewportState } from "./headless-terminal-state";
 import {
   resolveTerminalGridMetricsMeasurement,
   type TerminalGridCellMetrics,
@@ -67,6 +69,11 @@ export function TerminalGridView({
   const [cellWidth, setCellWidth] = useState<number | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number | null>(null);
   const measuredMetricsRef = useRef<TerminalGridCellMetrics | null>(null);
+  const frameRowsCacheRef = useRef<{
+    resolver: TerminalCellStyleResolver;
+    columns: number;
+    rows: WeakMap<NativeTerminalCell[], PaseoTerminalRow>;
+  } | null>(null);
   const resolvedFontFamily = useMemo(
     () => resolveNativeTerminalFontFamily(fontFamily),
     [fontFamily],
@@ -81,9 +88,21 @@ export function TerminalGridView({
     [resolver],
   );
   const columns = resolveVisibleCols({ viewportWidth, cellWidth, gridCols: state.cols });
+  if (
+    frameRowsCacheRef.current === null ||
+    frameRowsCacheRef.current.resolver !== resolver ||
+    frameRowsCacheRef.current.columns !== columns
+  ) {
+    frameRowsCacheRef.current = {
+      resolver,
+      columns,
+      rows: new WeakMap(),
+    };
+  }
+  const rowCache = frameRowsCacheRef.current.rows;
   const frame = useMemo(
-    () => buildTerminalFrame({ state, columns, resolver, selection }),
-    [columns, resolver, selection, state],
+    () => buildTerminalFrame({ state, columns, resolver, selection, rowCache }),
+    [columns, resolver, rowCache, selection, state],
   );
 
   const handleCellMetrics = useCallback(

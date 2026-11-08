@@ -7,6 +7,7 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "channel": "paseo-debug",
       "env": {
         "APP_VARIANT": "development"
       },
@@ -15,6 +16,7 @@
       }
     },
     "production": {
+      "channel": "production",
       "ios": {
         "image": "macos-tahoe-26.6-xcode-27.1"
       },

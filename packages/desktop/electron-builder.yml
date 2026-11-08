@@ -1,11 +1,11 @@
 npmRebuild: false
-appId: sh.paseo.desktop
-productName: Paseo
-executableName: Paseo
+appId: sh.paseo.desktop.trial0153
+productName: Paseo 0.15.3 Trial
+executableName: Paseo 0.15.3 Trial
 protocols:
-  - name: Paseo agent link
+  - name: Paseo 0.15.3 Trial agent link
     schemes:
-      - paseo
+      - paseo-trial0153
 afterPack: ./scripts/after-pack.js
 afterSign: ./scripts/after-sign.js
 directories:
@@ -40,7 +40,7 @@ publish:
   owner: getpaseo
   repo: paseo
 mac:
-  artifactName: "Paseo-${version}-${arch}.${ext}"
+  artifactName: "Paseo-0.15.3-Trial-${version}-${arch}.${ext}"
   minimumSystemVersion: "13.0.0"
   category: public.app-category.developer-tools
   icon: assets/icon.icns

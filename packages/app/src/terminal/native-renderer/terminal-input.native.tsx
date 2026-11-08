@@ -1,5 +1,14 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from "react";
+import {
+  Platform,
   StyleSheet,
   type NativeSyntheticEvent,
   type StyleProp,
@@ -102,7 +111,10 @@ export function resolveTerminalInputFocusRequest(input: {
   return input.isKeyboardVisible ? "none" : "refocus";
 }
 
-export function createTerminalTextInputState(): TerminalTextInputState {
+export function createTerminalTextInputState(input?: {
+  printableKeyPressFallback?: boolean;
+}): TerminalTextInputState {
+  const printableKeyPressFallback = input?.printableKeyPressFallback ?? true;
   let previousText = "";
   let submittedText: string | null = null;
   // A swallowed replacement leaves the terminal holding text the buffer no
@@ -129,6 +141,13 @@ export function createTerminalTextInputState(): TerminalTextInputState {
         return { data: "\r", shouldClear: true };
       }
       if (isPrintableKey(key)) {
+        // Android soft keyboards can report the same printable edit through
+        // both onKeyPress and onChangeText, and their event order varies by
+        // IME. Let the text buffer be authoritative there; keep keypress as a
+        // fallback on iOS where some input methods omit text changes.
+        if (!printableKeyPressFallback) {
+          return { data: "", shouldClear: false };
+        }
         previousText += key;
         return { data: key, shouldClear: false };
       }
@@ -182,12 +201,18 @@ export function createTerminalTextInputState(): TerminalTextInputState {
   };
 }
 
-export const TerminalInput = forwardRef<TerminalInputHandle, TerminalInputProps>(
-  function TerminalInput({ isKeyboardVisible, onFocus, onInput, onTerminalKey, style }, ref) {
+export const TerminalInput = memo(
+  forwardRef<TerminalInputHandle, TerminalInputProps>(function TerminalInput(
+    { isKeyboardVisible, onFocus, onInput, onTerminalKey, style },
+    ref,
+  ) {
     const inputRef = useRef<EditingTextInputHandle>(null);
     const isFocusedRef = useRef(false);
     const pendingFocusFrameRef = useRef<number | null>(null);
-    const inputState = useMemo(() => createTerminalTextInputState(), []);
+    const inputState = useMemo(
+      () => createTerminalTextInputState({ printableKeyPressFallback: Platform.OS !== "android" }),
+      [],
+    );
     const inputStyle = useMemo(() => [styles.input, style], [style]);
 
     const clearPendingFocus = useCallback(() => {
@@ -330,9 +355,10 @@ export const TerminalInput = forwardRef<TerminalInputHandle, TerminalInputProps>
         style={inputStyle}
         testID="terminal-native-input"
         textContentType="none"
+        rerenderOnChangeText={false}
       />
     );
-  },
+  }),
 );
 
 const styles = StyleSheet.create({

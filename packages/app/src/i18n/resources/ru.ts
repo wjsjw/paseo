@@ -2540,6 +2540,22 @@ export const ru: TranslationResources = {
       connectedHosts: "Подключенные хосты",
       offline: "Оффлайн",
       versionDiffers: "Версия отличается от версии на этом устройстве",
+      ota: {
+        title: "Обновления OTA",
+        enabled: "Включены",
+        disabled: "Выключены",
+        checkOnLaunch: "Автоматическая проверка при запуске приложения",
+        checkOnWifi: "Автоматическая проверка по Wi-Fi",
+        checkOnRecovery: "Проверка только после восстановления ошибки",
+        checkManually: "Только ручная проверка",
+        unavailable: "OTA недоступно в этой сборке",
+        runningEmbedded: "Запущена версия из APK",
+        runningRemote: "Активно OTA-обновление · {{id}}",
+        updateIdUnavailable: "OTA включено, но ID обновления недоступен",
+        channelAndRuntime: "{{channel}} · runtime {{runtime}}",
+        channelUnavailable: "канал неизвестен",
+        runtimeUnavailable: "runtime неизвестен",
+      },
       releaseChannel: {
         label: "Канал выпуска",
         description:

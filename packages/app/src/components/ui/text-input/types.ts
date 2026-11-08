@@ -20,6 +20,8 @@ export interface EditingTextInputProps extends Omit<
 > {
   initialValue?: string;
   onChangeText?: (text: string) => void;
+  /** Skip the render used to refresh intrinsic multiline sizing after each edit. */
+  rerenderOnChangeText?: boolean;
   onPasteImages?: (files: readonly NativePastedFile[]) => void;
   onPasteError?: (message: string) => void;
   variant?: "default" | "bottom-sheet";

@@ -14,7 +14,8 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
     const {
       initialValue = "",
       onChangeText,
-      onPasteImages: _,
+      rerenderOnChangeText: _rerenderOnChangeText,
+      onPasteImages: _onPasteImages,
       onPasteError: __,
       variant: ___,
       value: ____,

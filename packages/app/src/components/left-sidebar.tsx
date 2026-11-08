@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   Pressable,
+  ScrollView,
   StyleSheet as RNStyleSheet,
   Text,
   useWindowDimensions,
@@ -532,6 +533,7 @@ function MobileSidebar({
   closeSidebar,
 }: MobileSidebarProps) {
   const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
+  const { height: windowHeight } = useWindowDimensions();
   const { gesture: closeGesture, gestureRef: closeGestureRef } = useCloseAgentListGesture();
 
   const handleWorkspacePress = useCallback(() => {
@@ -568,11 +570,19 @@ function MobileSidebar({
     >
       <View style={styles.sidebarContent} pointerEvents="auto">
         <WindowChromeSafeArea placement="below" />
-        <SidebarNavRows
-          style={styles.sidebarHeaderGroup}
-          onBeforeNavigate={closeSidebar}
-          firstRowTrailing={closeButton}
-        />
+        <ScrollView
+          style={[styles.sidebarNavScroll, { maxHeight: Math.floor(windowHeight * 0.42) }]}
+          contentContainerStyle={styles.sidebarNavScrollContent}
+          showsVerticalScrollIndicator
+          persistentScrollbar
+          nestedScrollEnabled
+        >
+          <SidebarNavRows
+            style={styles.sidebarHeaderGroup}
+            onBeforeNavigate={closeSidebar}
+            firstRowTrailing={closeButton}
+          />
+        </ScrollView>
 
         {isInitialLoad && !hasActiveHostFilter ? (
           <SidebarAgentListSkeleton />
@@ -643,7 +653,7 @@ function DesktopSidebar({
   const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
   const sidebarWidth = usePanelStore((state) => state.sidebarWidth);
   const setSidebarWidth = usePanelStore((state) => state.setSidebarWidth);
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const viewportWidth = windowWidth - insets.left - insets.right;
   const visibleSidebarWidth = resolveDesktopSidebarWidth({
@@ -753,7 +763,15 @@ function DesktopSidebar({
           ) : (
             <TitlebarDragRegion />
           )}
-          <SidebarNavRows style={sidebarHeaderGroupStyle} />
+          <ScrollView
+            style={[styles.sidebarNavScroll, { maxHeight: Math.floor(windowHeight * 0.42) }]}
+            contentContainerStyle={styles.sidebarNavScrollContent}
+            showsVerticalScrollIndicator
+            persistentScrollbar
+            nestedScrollEnabled
+          >
+            <SidebarNavRows style={sidebarHeaderGroupStyle} />
+          </ScrollView>
         </View>
 
         {isInitialLoad && !hasActiveHostFilter ? (
@@ -847,6 +865,13 @@ const styles = StyleSheet.create((theme) => ({
   sidebarContent: {
     flex: 1,
     minHeight: 0,
+  },
+  sidebarNavScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  sidebarNavScrollContent: {
+    flexGrow: 0,
   },
   mobileCloseButton: {
     marginRight: theme.spacing[2],

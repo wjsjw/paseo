@@ -1,8 +1,13 @@
 import { requireNativeView } from "expo";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 
-import type { PaseoTerminalCellMetrics, PaseoTerminalFrame, PaseoTerminalTheme } from "./contract";
+import type {
+  PaseoTerminalCellMetrics,
+  PaseoTerminalFrame,
+  PaseoTerminalRow,
+  PaseoTerminalTheme,
+} from "./contract";
 import { encodeTerminalCustomGlyphs, type PaseoTerminalCustomGlyph } from "./custom-glyphs";
 import { encodeTerminalFrame, type NativePaseoTerminalFrame } from "./frame-encoding";
 
@@ -31,7 +36,8 @@ const NativePaseoTerminalView = requireNativeView<NativePaseoTerminalViewProps>(
 const CUSTOM_GLYPHS = encodeTerminalCustomGlyphs();
 
 export function PaseoTerminalView({ frame, onCellMetrics, ...props }: PaseoTerminalViewProps) {
-  const nativeFrame = useMemo(() => encodeTerminalFrame(frame), [frame]);
+  const encodedRowsRef = useRef(new WeakMap<PaseoTerminalRow, string>());
+  const nativeFrame = useMemo(() => encodeTerminalFrame(frame, encodedRowsRef.current), [frame]);
   const handleCellMetrics = useCallback(
     (event: { nativeEvent: PaseoTerminalCellMetrics }) => onCellMetrics?.(event.nativeEvent),
     [onCellMetrics],

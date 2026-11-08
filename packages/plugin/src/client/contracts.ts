@@ -47,6 +47,16 @@ interface PluginNavigableHostProps extends PluginHostProps {
       readonly workspaceId: string;
       readonly serverId?: string;
     }) => void;
+    /** Opens a terminal tab in the named workspace. Optional until the host adds this capability. */
+    readonly openTerminal?: (input: {
+      readonly workspaceId: string;
+      readonly terminalId: string;
+      readonly serverId?: string;
+    }) => void;
+    /** Agent currently focused in this host session, when one is selected. */
+    readonly activeAgentId?: string | null;
+    /** Terminal currently focused in this host session, when one is selected. */
+    readonly activeTerminalId?: string | null;
   };
 }
 

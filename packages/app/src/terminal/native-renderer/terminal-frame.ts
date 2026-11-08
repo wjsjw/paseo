@@ -18,13 +18,20 @@ export function buildTerminalFrame(input: {
   columns: number;
   resolver: TerminalCellStyleResolver;
   selection: TerminalSelectionRange | null;
+  rowCache?: WeakMap<NativeTerminalCell[], PaseoTerminalRow>;
 }): PaseoTerminalFrame {
   const grid = input.state.grid as NativeTerminalCell[][];
   return {
     columns: input.columns,
-    rows: grid.map((cells) =>
-      buildRow({ cells, columns: input.columns, resolver: input.resolver }),
-    ),
+    rows: grid.map((cells) => {
+      const cached = input.rowCache?.get(cells);
+      if (cached) {
+        return cached;
+      }
+      const row = buildRow({ cells, columns: input.columns, resolver: input.resolver });
+      input.rowCache?.set(cells, row);
+      return row;
+    }),
     cursor: input.state.cursor.hidden
       ? null
       : { row: input.state.cursor.row, col: input.state.cursor.col },

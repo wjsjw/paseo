@@ -2553,6 +2553,22 @@ export const fr: TranslationResources = {
       connectedHosts: "Hôtes connectés",
       offline: "Hors ligne",
       versionDiffers: "Version différente de celle de cet appareil",
+      ota: {
+        title: "Mises à jour OTA",
+        enabled: "Activées",
+        disabled: "Désactivées",
+        checkOnLaunch: "Vérification automatique au lancement",
+        checkOnWifi: "Vérification automatique en Wi-Fi",
+        checkOnRecovery: "Vérification après récupération d’erreur uniquement",
+        checkManually: "Vérification manuelle uniquement",
+        unavailable: "OTA indisponible dans cette version",
+        runningEmbedded: "Version intégrée à l’APK en cours d’exécution",
+        runningRemote: "OTA active · {{id}}",
+        updateIdUnavailable: "OTA activée, mais aucun ID de mise à jour disponible",
+        channelAndRuntime: "{{channel}} · runtime {{runtime}}",
+        channelUnavailable: "canal inconnu",
+        runtimeUnavailable: "runtime inconnu",
+      },
       releaseChannel: {
         label: "Canal de publication",
         description:

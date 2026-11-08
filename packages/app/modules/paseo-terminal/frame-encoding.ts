@@ -1,4 +1,9 @@
-import type { PaseoTerminalCursor, PaseoTerminalFrame, PaseoTerminalSelection } from "./contract";
+import type {
+  PaseoTerminalCursor,
+  PaseoTerminalFrame,
+  PaseoTerminalRow,
+  PaseoTerminalSelection,
+} from "./contract";
 
 /** A frame as it crosses to native. */
 export interface NativePaseoTerminalFrame {
@@ -16,10 +21,21 @@ export interface NativePaseoTerminalFrame {
  * A missing cursor or selection is left out rather than sent as `null`: Expo on iOS fails to
  * convert `null` into an optional record field and then drops the whole frame.
  */
-export function encodeTerminalFrame(frame: PaseoTerminalFrame): NativePaseoTerminalFrame {
+export function encodeTerminalFrame(
+  frame: PaseoTerminalFrame,
+  rowCache?: WeakMap<PaseoTerminalRow, string>,
+): NativePaseoTerminalFrame {
   const native: NativePaseoTerminalFrame = {
     columns: frame.columns,
-    rows: frame.rows.map((row) => `${row.cells.join(",")};${row.styles.join(",")};${row.text}`),
+    rows: frame.rows.map((row) => {
+      const cached = rowCache?.get(row);
+      if (cached !== undefined) {
+        return cached;
+      }
+      const encoded = `${row.cells.join(",")};${row.styles.join(",")};${row.text}`;
+      rowCache?.set(row, encoded);
+      return encoded;
+    }),
   };
   if (frame.cursor) native.cursor = frame.cursor;
   if (frame.selection) native.selection = frame.selection;

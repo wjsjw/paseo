@@ -110,12 +110,52 @@ interface TerminalCoordinateStorage {
   trimSubscription: { dispose(): void } | null;
 }
 
+interface ResolvedBufferWindow {
+  startRow: number;
+  endRow: number;
+}
+
+interface CachedViewportRows {
+  firstRow: number;
+  rowCount: number;
+  cols: number;
+  coordinateEpoch: number;
+  rows: TerminalCellRow[];
+}
+
 function activeBufferLines(terminal: HeadlessTerminalInstance) {
   return (terminal as unknown as HeadlessTerminalWithCore)._core?._bufferService?.buffer?.lines;
 }
 
 function blankCell(): NativeTerminalCell {
   return { char: " ", width: 1, fg: undefined, bg: undefined };
+}
+
+function terminalRowsEqual(left: TerminalCellRow, right: TerminalCellRow): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const previous = left[index]!;
+    const next = right[index]!;
+    if (
+      previous.char !== next.char ||
+      previous.width !== next.width ||
+      previous.fg !== next.fg ||
+      previous.bg !== next.bg ||
+      previous.fgMode !== next.fgMode ||
+      previous.bgMode !== next.bgMode ||
+      previous.bold !== next.bold ||
+      previous.italic !== next.italic ||
+      previous.underline !== next.underline ||
+      previous.dim !== next.dim ||
+      previous.inverse !== next.inverse ||
+      previous.strikethrough !== next.strikethrough
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function extractCell(
@@ -173,11 +213,7 @@ function extractBufferWindow(
   oldestRow: number,
   input: TerminalBufferWindowInput,
 ): TerminalBufferWindow {
-  const rowCount = Math.max(0, Math.floor(input.rowCount));
-  const bufferLength = terminal.buffer.active.length;
-  const newestRow = oldestRow + bufferLength - 1;
-  const startRow = Math.min(Math.max(oldestRow, Math.floor(input.startRow)), newestRow + 1);
-  const endRow = Math.min(newestRow + 1, startRow + rowCount);
+  const { startRow, endRow } = resolveBufferWindow(terminal, oldestRow, input);
   const reusableCell = terminal.buffer.active.getNullCell();
   const rows: TerminalCellRow[] = [];
   const wrappedRows: boolean[] = [];
@@ -190,6 +226,17 @@ function extractBufferWindow(
   }
 
   return { startRow, rows, wrappedRows };
+}
+
+function resolveBufferWindow(
+  terminal: HeadlessTerminalInstance,
+  oldestRow: number,
+  input: TerminalBufferWindowInput,
+): ResolvedBufferWindow {
+  const rowCount = Math.max(0, Math.floor(input.rowCount));
+  const newestRow = oldestRow + terminal.buffer.active.length - 1;
+  const startRow = Math.min(Math.max(oldestRow, Math.floor(input.startRow)), newestRow + 1);
+  return { startRow, endRow: Math.min(newestRow + 1, startRow + rowCount) };
 }
 
 function rowRange(firstRow: number, rowCount: number): TerminalRowRange {
@@ -264,34 +311,6 @@ function extractInputModeState(
   };
 }
 
-function extractViewportState(
-  terminal: HeadlessTerminalInstance,
-  coordinateEpoch: number,
-  oldestRow: number,
-  input?: TerminalViewportStateInput,
-): TerminalViewportState {
-  const bounds = extractBufferBounds(terminal, coordinateEpoch, oldestRow);
-  const rowCount = input ? Math.max(0, Math.floor(input.rowCount)) : terminal.rows;
-  const firstRow = input ? input.firstRow : bounds.currentViewport.firstRow;
-  const window = extractBufferWindow(terminal, oldestRow, { startRow: firstRow, rowCount });
-  return {
-    rows: window.rows.length,
-    cols: terminal.cols,
-    firstRow: window.startRow,
-    oldestRow: bounds.oldestRow,
-    newestRow: bounds.newestRow,
-    grid: window.rows,
-    cursor: extractCursorState(
-      terminal,
-      {
-        firstRow: window.startRow,
-        rowCount: window.rows.length,
-      },
-      oldestRow,
-    ),
-  };
-}
-
 export function createNativeHeadlessTerminal(
   options: NativeHeadlessTerminalOptions,
 ): NativeHeadlessTerminal {
@@ -310,6 +329,14 @@ export function createNativeHeadlessTerminal(
   const decoder = new TextDecoder();
   let coordinateEpoch = 0;
   const coordinateStorage = new Map<object, TerminalCoordinateStorage>();
+  let cachedViewportRows: CachedViewportRows | null = null;
+  let refreshAllViewportRows = true;
+  const dirtyBufferRows = new Set<number>();
+
+  function markAllViewportRowsDirty(): void {
+    refreshAllViewportRows = true;
+    dirtyBufferRows.clear();
+  }
 
   function getActiveCoordinateStorage(): TerminalCoordinateStorage {
     const lines = activeBufferLines(terminal);
@@ -333,7 +360,84 @@ export function createNativeHeadlessTerminal(
   const bufferChangeSubscription = terminal.buffer.onBufferChange(() => {
     coordinateEpoch += 1;
     getActiveCoordinateStorage();
+    markAllViewportRowsDirty();
   });
+  const renderSubscription = terminal.onRender(({ start, end }) => {
+    const bounds = extractBufferBounds(
+      terminal,
+      coordinateEpoch,
+      getActiveCoordinateStorage().oldestRow,
+    );
+    for (let row = start; row <= end; row += 1) {
+      dirtyBufferRows.add(bounds.currentViewport.firstRow + row);
+    }
+  });
+  const scrollSubscription = terminal.onScroll(markAllViewportRowsDirty);
+  const resizeSubscription = terminal.onResize(markAllViewportRowsDirty);
+
+  function getViewportState(input?: TerminalViewportStateInput): TerminalViewportState {
+    const oldestRow = getActiveCoordinateStorage().oldestRow;
+    const bounds = extractBufferBounds(terminal, coordinateEpoch, oldestRow);
+    const requestedRowCount = input ? Math.max(0, Math.floor(input.rowCount)) : terminal.rows;
+    const requestedFirstRow = input ? input.firstRow : bounds.currentViewport.firstRow;
+    const window = resolveBufferWindow(terminal, oldestRow, {
+      startRow: requestedFirstRow,
+      rowCount: requestedRowCount,
+    });
+    const firstRow = window.startRow;
+    const rowCount = window.endRow - window.startRow;
+    const cache = cachedViewportRows;
+    const canReuseRows =
+      !refreshAllViewportRows &&
+      cache !== null &&
+      cache.firstRow === firstRow &&
+      cache.rowCount === rowCount &&
+      cache.cols === terminal.cols &&
+      cache.coordinateEpoch === coordinateEpoch;
+    let grid: TerminalCellRow[];
+
+    if (!canReuseRows) {
+      grid = extractBufferWindow(terminal, oldestRow, {
+        startRow: firstRow,
+        rowCount,
+      }).rows;
+    } else {
+      grid = cache.rows.slice();
+      for (const dirtyRow of dirtyBufferRows) {
+        const viewportRow = dirtyRow - firstRow;
+        if (viewportRow < 0 || viewportRow >= grid.length) {
+          continue;
+        }
+        const [row] = extractBufferWindow(terminal, oldestRow, {
+          startRow: dirtyRow,
+          rowCount: 1,
+        }).rows;
+        if (row && !terminalRowsEqual(grid[viewportRow]!, row)) {
+          grid[viewportRow] = row;
+        }
+      }
+    }
+
+    dirtyBufferRows.clear();
+    refreshAllViewportRows = false;
+    cachedViewportRows = {
+      firstRow,
+      rowCount,
+      cols: terminal.cols,
+      coordinateEpoch,
+      rows: grid,
+    };
+
+    return {
+      rows: grid.length,
+      cols: terminal.cols,
+      firstRow,
+      oldestRow: bounds.oldestRow,
+      newestRow: bounds.newestRow,
+      grid,
+      cursor: extractCursorState(terminal, { firstRow, rowCount: grid.length }, oldestRow),
+    };
+  }
 
   return {
     async write(data: NativeTerminalWriteData): Promise<void> {
@@ -348,12 +452,7 @@ export function createNativeHeadlessTerminal(
       });
     },
     getViewportState(input?: TerminalViewportStateInput): TerminalViewportState {
-      return extractViewportState(
-        terminal,
-        coordinateEpoch,
-        getActiveCoordinateStorage().oldestRow,
-        input,
-      );
+      return getViewportState(input);
     },
     getInputModeState(): NativeHeadlessTerminalInputModeState {
       return extractInputModeState(terminal);
@@ -366,16 +465,21 @@ export function createNativeHeadlessTerminal(
     },
     resize(input: { rows: number; cols: number }): void {
       coordinateEpoch += 1;
+      markAllViewportRowsDirty();
       terminal.resize(input.cols, input.rows);
     },
     reset(): void {
       coordinateEpoch += 1;
+      markAllViewportRowsDirty();
       decoder.decode();
       terminal.reset();
       getActiveCoordinateStorage().oldestRow = 0;
     },
     dispose(): void {
       bufferChangeSubscription.dispose();
+      renderSubscription.dispose();
+      scrollSubscription.dispose();
+      resizeSubscription.dispose();
       for (const storage of coordinateStorage.values()) {
         storage.trimSubscription?.dispose();
       }

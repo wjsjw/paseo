@@ -11,6 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "expo-router/react-navigation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Updates from "expo-updates";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -483,6 +484,7 @@ function AboutSection({ appVersion, appVersionText, isDesktopApp }: AboutSection
             </View>
             <Text style={styles.aboutValue}>{appVersionText}</Text>
           </View>
+          {isNative && !isDesktopApp ? <ExpoUpdateStatusRow /> : null}
           <WhatsNewRow />
           {isDesktopApp ? <DesktopAppUpdateRow /> : null}
         </View>
@@ -492,6 +494,54 @@ function AboutSection({ appVersion, appVersionText, isDesktopApp }: AboutSection
         <CommunityLinks />
       </View>
     </>
+  );
+}
+
+function ExpoUpdateStatusRow() {
+  const { t } = useTranslation();
+  const isEnabled = Updates.isEnabled;
+  const checkStrategy = Updates.checkAutomatically;
+  let checkLabel = t("settings.about.ota.checkManually");
+  if (checkStrategy === "ON_LOAD") {
+    checkLabel = t("settings.about.ota.checkOnLaunch");
+  } else if (checkStrategy === "WIFI_ONLY") {
+    checkLabel = t("settings.about.ota.checkOnWifi");
+  } else if (checkStrategy === "ON_ERROR_RECOVERY") {
+    checkLabel = t("settings.about.ota.checkOnRecovery");
+  }
+
+  let currentUpdateLabel: string;
+  if (!isEnabled) {
+    currentUpdateLabel = t("settings.about.ota.unavailable");
+  } else if (Updates.isEmbeddedLaunch) {
+    currentUpdateLabel = t("settings.about.ota.runningEmbedded");
+  } else if (Updates.updateId) {
+    currentUpdateLabel = t("settings.about.ota.runningRemote", {
+      id: Updates.updateId.slice(0, 8),
+    });
+  } else {
+    currentUpdateLabel = t("settings.about.ota.updateIdUnavailable");
+  }
+  const channel = Updates.channel ?? t("settings.about.ota.channelUnavailable");
+  const runtime = Updates.runtimeVersion ?? t("settings.about.ota.runtimeUnavailable");
+
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]} testID="settings-ota-status">
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{t("settings.about.ota.title")}</Text>
+        <Text style={settingsStyles.rowHint}>{checkLabel}</Text>
+        <Text style={settingsStyles.rowHint}>{currentUpdateLabel}</Text>
+        <Text style={settingsStyles.rowHint}>
+          {t("settings.about.ota.channelAndRuntime", { channel, runtime })}
+        </Text>
+      </View>
+      <Text
+        style={[styles.aboutValue, isEnabled ? styles.aboutOtaEnabled : styles.aboutOtaDisabled]}
+        testID="settings-ota-enabled"
+      >
+        {t(isEnabled ? "settings.about.ota.enabled" : "settings.about.ota.disabled")}
+      </Text>
+    </View>
   );
 }
 
@@ -1528,6 +1578,12 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
   },
   aboutVersionMismatch: {
+    color: theme.colors.palette.amber[500],
+  },
+  aboutOtaEnabled: {
+    color: theme.colors.palette.green[500],
+  },
+  aboutOtaDisabled: {
     color: theme.colors.palette.amber[500],
   },
   aboutErrorText: {

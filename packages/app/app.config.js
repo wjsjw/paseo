@@ -9,6 +9,7 @@ const withPasteInput = require("./plugins/with-paste-input");
 const withAndroidScroll = require("./modules/paseo-scroll/app.plugin");
 const { getNativeReleaseVersion } = require("./native-release-version");
 const appVariant = process.env.APP_VARIANT ?? "production";
+const updateChannel = appVariant === "development" ? "paseo-debug" : "production";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
 const isWatchdogBuild = process.env.PASEO_WATCHDOG_BUILD === "1";
 const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
@@ -69,8 +70,8 @@ function resolveSecretFile(params) {
 
 const variants = {
   production: {
-    name: "Paseo",
-    packageId: "sh.paseo",
+    name: "Paseo 0.15.3 Trial",
+    packageId: "sh.paseo.trial0153",
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_PROD",
       fallbackRelativePath: "./.secrets/google-services.prod.json",
@@ -105,6 +106,13 @@ export default {
     orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: "paseo",
+    runtimeVersion: { policy: "appVersion" },
+    updates: {
+      enabled: true,
+      url: "https://u.expo.dev/02e622fd-e047-4b66-a560-b49c770b6919",
+      checkAutomatically: "ON_LOAD",
+      requestHeaders: { "expo-channel-name": updateChannel },
+    },
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
@@ -197,9 +205,9 @@ export default {
       diagnosticBuildTime: process.env.PASEO_DIAGNOSTIC_BUILD_TIME,
       router: {},
       eas: {
-        projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",
+        projectId: "02e622fd-e047-4b66-a560-b49c770b6919",
       },
     },
-    owner: "getpaseo",
+    owner: "wjsjw",
   },
 };

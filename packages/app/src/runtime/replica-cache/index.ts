@@ -1,6 +1,7 @@
 import { findMountedWindowStart } from "@/agent-stream/history-window";
 import { z } from "zod";
 import {
+  AgentAttachmentSchema,
   AgentStatusSchema,
   AgentTimelineItemPayloadSchema,
   WorkspaceGitHubRuntimePayloadSchema,
@@ -19,6 +20,7 @@ import {
   isUnreconciledLocalUserMessage,
   type AgentToolCallData,
   type StreamItem,
+  type UserMessageItem,
 } from "@/types/stream";
 import { normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { clearLegacyReplicaCache } from "./legacy-cleanup";
@@ -77,6 +79,15 @@ const TimelinePositionSchema = z.strictObject({
   epoch: z.string(),
   seq: z.number().int().nonnegative(),
 });
+const CachedImageAttachmentSchema = z.strictObject({
+  id: z.string(),
+  mimeType: z.string(),
+  storageType: z.enum(["web-indexeddb", "desktop-file", "native-file"]),
+  storageKey: z.string(),
+  fileName: z.string().nullable().optional(),
+  byteSize: z.number().nullable().optional(),
+  createdAt: z.number(),
+});
 const PluginTimelineDataSchema: z.ZodType<PluginTimelineData> = z.lazy(() =>
   z.union([
     z.null(),
@@ -119,6 +130,8 @@ const StoredTimelineItemSchema = z.discriminatedUnion("kind", [
     clientMessageId: z.string().optional(),
     messageId: z.string().optional(),
     text: z.string(),
+    images: z.array(CachedImageAttachmentSchema).optional(),
+    attachments: z.array(AgentAttachmentSchema).optional(),
   }),
   z.strictObject({
     ...TimelineItemBaseShape,
@@ -449,6 +462,10 @@ function serializeTimelineItem(item: StreamItem): StoredTimelineItem | null {
         ...(item.clientMessageId ? { clientMessageId: item.clientMessageId } : {}),
         ...(item.messageId ? { messageId: item.messageId } : {}),
         text: item.text,
+        ...(item.images && item.images.length > 0 ? { images: item.images } : {}),
+        ...(item.attachments && item.attachments.length > 0
+          ? { attachments: item.attachments }
+          : {}),
       };
     case "assistant_message":
       return {
@@ -522,6 +539,26 @@ function deserializeTimelineItem(item: StoredTimelineItem): StreamItem {
   return deserializeBuiltinTimelineItem(item);
 }
 
+function deserializeCachedUserMessage(
+  item: Extract<StoredTimelineItem, { kind: "user_message" }>,
+  base: {
+    id: string;
+    timelineCursor?: { epoch: string; seq: number };
+    turnId?: string;
+    timestamp: Date;
+  },
+): UserMessageItem {
+  return {
+    ...base,
+    kind: "user_message",
+    ...(item.clientMessageId ? { clientMessageId: item.clientMessageId } : {}),
+    ...(item.messageId ? { messageId: item.messageId } : {}),
+    text: item.text,
+    ...(item.images && item.images.length > 0 ? { images: item.images } : {}),
+    ...(item.attachments && item.attachments.length > 0 ? { attachments: item.attachments } : {}),
+  };
+}
+
 function deserializeBuiltinTimelineItem(
   item: Exclude<StoredTimelineItem, { kind: "plugin" }>,
 ): StreamItem {
@@ -533,13 +570,7 @@ function deserializeBuiltinTimelineItem(
   };
   switch (item.kind) {
     case "user_message":
-      return {
-        ...base,
-        kind: item.kind,
-        ...(item.clientMessageId ? { clientMessageId: item.clientMessageId } : {}),
-        ...(item.messageId ? { messageId: item.messageId } : {}),
-        text: item.text,
-      };
+      return deserializeCachedUserMessage(item, base);
     case "assistant_message":
       return {
         ...base,
@@ -755,7 +786,7 @@ function serializeProject(project: ProjectDescriptor): StoredProject {
 function isTimelineItemStoredLosslessly(item: StreamItem): boolean {
   switch (item.kind) {
     case "user_message":
-      return (item.images?.length ?? 0) === 0 && (item.attachments?.length ?? 0) === 0;
+      return true;
     case "tool_call":
       return item.payload.source === "agent";
     default:

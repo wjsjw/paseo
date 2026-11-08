@@ -618,13 +618,17 @@ export function createPaseoApi(
     );
     return createAgentHandle(agent);
   };
-  const terminals = createTerminalActions(daemonClient, async (workspaceId) => {
-    const workspace = await createWorkspaceHandle(workspaceId).refresh();
-    if (!workspace?.workspaceDirectory) {
-      throw new Error(`Workspace ${workspaceId} is not active or has no available directory`);
-    }
-    return workspace.workspaceDirectory;
-  });
+  const terminals = createTerminalActions(
+    daemonClient,
+    async (workspaceId) => {
+      const workspace = await createWorkspaceHandle(workspaceId).refresh();
+      if (!workspace?.workspaceDirectory) {
+        throw new Error(`Workspace ${workspaceId} is not active or has no available directory`);
+      }
+      return workspace.workspaceDirectory;
+    },
+    (create) => own(create),
+  );
   const createWorkspaceHandle = createWorkspaceHandleFactory(
     daemonClient,
     createAgent,

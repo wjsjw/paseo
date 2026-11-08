@@ -6,6 +6,7 @@ const TerminalSchema = z.object({
   workspaceId: z.string(),
   cwd: z.string(),
   name: z.string(),
+  title: z.string().optional(),
 });
 
 export type PaseoTerminal = z.infer<typeof TerminalSchema>;
@@ -58,6 +59,10 @@ export interface PaseoTerminalHandle {
 export interface PaseoTerminalActions {
   create(options: PaseoTerminalCreateOptions): Promise<PaseoTerminalHandle>;
   list(options?: PaseoTerminalListOptions): Promise<PaseoTerminalListResult>;
+  observe(options: {
+    workspaceId: string;
+    signal?: AbortSignal;
+  }): Promise<ReturnType<DaemonClient["observeTerminals"]>>;
   ref(terminal: string | PaseoTerminal): PaseoTerminalHandle;
 }
 
@@ -72,6 +77,7 @@ type TerminalClient = Pick<
   | "getLastServerInfoMessage"
   | "createTerminal"
   | "listTerminals"
+  | "observeTerminals"
   | "sendTerminalInput"
   | "captureTerminal"
   | "killTerminal"
@@ -81,6 +87,8 @@ type TerminalClient = Pick<
 export function createTerminalActions(
   daemonClient: TerminalClient,
   resolveWorkspaceDirectory: (workspaceId: string) => Promise<string>,
+  ownObservation: <T extends { release(): Promise<void> }>(create: () => T) => T = (create) =>
+    create(),
 ): PaseoTerminalActions {
   function client(): TerminalClient {
     daemonClient.ensureConnected();
@@ -131,6 +139,10 @@ export function createTerminalActions(
   };
 
   return {
+    observe: async ({ workspaceId, signal }) => {
+      const cwd = await resolveWorkspaceDirectory(workspaceId);
+      return ownObservation(() => client().observeTerminals({ cwd, workspaceId, signal }));
+    },
     create: async ({ workspaceId, cwd, name, requestId, ...options }) => {
       const driver = client();
       if (!workspaceId) throw new Error("workspaceId is required");
